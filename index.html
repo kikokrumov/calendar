@@ -1,0 +1,351 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Collaborative Calendar with Event Names</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; }
+    .controls { margin-bottom: 10px; }
+    .calendar-container { display: flex; flex-wrap: wrap; gap: 10px; }
+    .month-block { width: 300px; border: 1px solid #333; padding: 5px; }
+    .month-title { font-weight: bold; text-align: center; margin-bottom: 5px; font-size: 14px; }
+    .week-row { display: grid; grid-template-columns: 30px repeat(7, 1fr); gap: 3px; margin-bottom: 3px; }
+    .week-label { font-weight: bold; text-align: center; padding-top: 10px; font-size: 10px; }
+    .day { height: 60px; border: 1px solid #ccc; text-align: center; padding: 2px; cursor: pointer; white-space: pre-line; font-size: 10px; }
+    .overview { margin-top: 20px; }
+    .person-group { margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+<h3>Collaborative Calendar with Event Names (2025-2030)</h3>
+<div class="controls">
+  <label for="year">Year:</label>
+  <select id="year">
+<option value="2025">2025</option>
+<option value="2026">2026</option>
+<option value="2027">2027</option>
+<option value="2028">2028</option>
+<option value="2029">2029</option>
+<option value="2030">2030</option>
+</select>
+
+  <label for="person">Person:</label>
+  <select id="person">
+    <option value="All">All</option>
+    <option value="Kiril">Kiril</option>
+    <option value="Georgi">Georgi</option>
+    <option value="Buchkov">Buchkov</option>
+    <option value="Ivan">Ivan</option>
+    <option value="Chris">Chris</option>
+  </select>
+
+  <button onclick="exportData()">Export</button>
+</div>
+<div class="calendar-container" id="calendar-container"></div>
+<div class="overview" id="overview"></div>
+<script>
+  const peopleColors = {
+    Kiril: '#e74c3c',
+    Georgi: '#3498db',
+    Buchkov: '#2ecc71',
+    Ivan: '#f1c40f',
+    Chris: '#9b59b6'
+  };
+
+  const personSelect = document.getElementById('person');
+  const yearSelect = document.getElementById('year');
+  const container = document.getElementById('calendar-container');
+  const overview = document.getElementById('overview');
+  let savedData = JSON.parse(localStorage.getItem('fullYearCalendar')) || {};
+  let eventNames = JSON.parse(localStorage.getItem('eventNames')) || {};
+
+  function getWeekNumber(dateStr) {
+    const dateObj = new Date(dateStr);
+    const tempDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    tempDate.setHours(0, 0, 0, 0);
+    tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7));
+    const yearStart = new Date(tempDate.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((tempDate - yearStart) / 86400000) + 1) / 7);
+    return weekNo;
+  }
+
+  function renderCalendar(year) {
+    container.innerHTML = '';
+    overview.innerHTML = '';
+    const filterPerson = personSelect.value;
+    const personDays = {};
+
+    for (let month = 0; month < 12; month++) {
+      const monthBlock = document.createElement('div');
+      monthBlock.className = 'month-block';
+      const monthTitle = document.createElement('div');
+      monthTitle.className = 'month-title';
+      monthTitle.textContent = new Date(year, month).toLocaleString('default', { month: 'long' });
+      monthBlock.appendChild(monthTitle);
+
+      let weekRows = {};
+
+      for (let day = 1; day <= 31; day++) {
+        let dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        let dateObj = new Date(dateStr);
+        if (dateObj.getMonth() !== month) continue;
+
+        let weekNo = getWeekNumber(dateStr);
+        if (!weekRows[weekNo]) {
+          weekRows[weekNo] = document.createElement('div');
+          weekRows[weekNo].className = 'week-row';
+          const weekLabel = document.createElement('div');
+          weekLabel.className = 'week-label';
+          weekLabel.textContent = `W${weekNo}`;
+          weekRows[weekNo].appendChild(weekLabel);
+        }
+        let dayDiv = document.createElement('div');
+        dayDiv.className = 'day';
+        dayDiv.dataset.date = dateStr;
+        dayDiv.textContent = `${day}`;
+
+        if (eventNames[dateStr]) {
+          dayDiv.style.backgroundColor = '#34495e';
+          dayDiv.textContent += `
+📌 ${eventNames[dateStr]}`;
+        } else if (savedData[dateStr]) {
+          const people = savedData[dateStr];
+          let labels = [];
+          for (const person of people) {
+            labels.push(person);
+            if (!personDays[person]) personDays[person] = [];
+            personDays[person].push(`${dateStr} (Week ${weekNo})`);
+          }
+          dayDiv.textContent += `
+(${labels.join(', ')})`;
+          dayDiv.style.backgroundColor = peopleColors[people[0]];
+        }
+
+        dayDiv.addEventListener('click', () => {
+          const selectedPerson = personSelect.value;
+          if (selectedPerson === 'All') {
+            const eventName = prompt('Enter event name for this day:');
+            if (eventName) {
+              eventNames[dateStr] = eventName;
+              localStorage.setItem('eventNames', JSON.stringify(eventNames));
+              renderCalendar(year);
+            }
+            return;
+          }
+          if (!savedData[dateStr]) savedData[dateStr] = [];
+          const index = savedData[dateStr].indexOf(selectedPerson);
+          if (index === -1) {
+            savedData[dateStr].push(selectedPerson);
+          } else {
+            savedData[dateStr].splice(index, 1);
+            if (savedData[dateStr].length === 0) {
+              delete savedData[dateStr];
+            }
+          }
+          localStorage.setItem('fullYearCalendar', JSON.stringify(savedData));
+          renderCalendar(year);
+        });
+
+        weekRows[weekNo].appendChild(dayDiv);
+      }
+
+      for (const weekNo in weekRows) {
+        monthBlock.appendChild(weekRows[weekNo]);
+      }
+      container.appendChild(monthBlock);
+    }
+
+    for (const person in personDays) {
+      const group = document.createElement('div');
+      group.className = 'person-group';
+      group.innerHTML = `<h4>${person}</h4><ul>` + personDays[person].map(d => `<li>${d}</li>`).join('') + '</ul>';
+      overview.appendChild(group);
+    }
+  }
+
+  yearSelect.addEventListener('change', () => {
+    renderCalendar(parseInt(yearSelect.value));
+  });
+
+  personSelect.addEventListener('change', () => {
+    renderCalendar(parseInt(yearSelect.value));
+  });
+
+  function exportData() {
+    const data = {
+      calendar: savedData,
+      events: eventNames
+    };
+    const dataStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'calendar_data.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  renderCalendar(parseInt(yearSelect.value));
+</script>
+</body>
+</html>
+<script>
+  const peopleColors = {
+    Kiril: '#e74c3c',
+    Georgi: '#3498db',
+    Buchkov: '#2ecc71',
+    Ivan: '#f1c40f',
+    Chris: '#9b59b6'
+  };
+  const teamEventColor = '#34495e';
+
+  let teamEventMode = false;
+  const personSelect = document.getElementById('person');
+  const yearSelect = document.getElementById('year');
+  const container = document.getElementById('calendar-container');
+  const overview = document.getElementById('overview');
+  let savedData = JSON.parse(localStorage.getItem('fullYearCalendar')) || {};
+  let teamEventDays = JSON.parse(localStorage.getItem('teamEventDays')) || [];
+
+  function getWeekNumber(dateStr) {
+    const dateObj = new Date(dateStr);
+    const tempDate = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+    tempDate.setHours(0, 0, 0, 0);
+    tempDate.setDate(tempDate.getDate() + 4 - (tempDate.getDay() || 7));
+    const yearStart = new Date(tempDate.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((tempDate - yearStart) / 86400000) + 1) / 7);
+    return weekNo;
+  }
+
+  function toggleTeamEventMode() {
+    teamEventMode = !teamEventMode;
+    document.querySelector('button[onclick="toggleTeamEventMode()"]').textContent = teamEventMode ? 'Team Event Mode: ON' : 'Team Event Mode: OFF';
+  }
+
+  function renderCalendar(year) {
+    container.innerHTML = '';
+    overview.innerHTML = '';
+    const filterPerson = personSelect.value;
+    const personDays = {};
+
+    for (let month = 0; month < 12; month++) {
+      const monthBlock = document.createElement('div');
+      monthBlock.className = 'month-block';
+      const monthTitle = document.createElement('div');
+      monthTitle.className = 'month-title';
+      monthTitle.textContent = new Date(year, month).toLocaleString('default', { month: 'long' });
+      monthBlock.appendChild(monthTitle);
+
+      let weekRows = {};
+
+      for (let day = 1; day <= 31; day++) {
+        let dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        let dateObj = new Date(dateStr);
+        if (dateObj.getFullYear() == year && dateObj.getMonth() == month && dateObj.getDate() == day) {
+          let weekNo = getWeekNumber(dateStr);
+          if (!weekRows[weekNo]) {
+            weekRows[weekNo] = document.createElement('div');
+            weekRows[weekNo].className = 'week-row';
+            const weekLabel = document.createElement('div');
+            weekLabel.className = 'week-label';
+            weekLabel.textContent = `W${weekNo}`;
+            weekRows[weekNo].appendChild(weekLabel);
+          }
+          let dayDiv = document.createElement('div');
+          dayDiv.className = 'day';
+          dayDiv.dataset.date = dateStr;
+          dayDiv.textContent = `${day}`;
+
+          if (teamEventDays.includes(dateStr)) {
+            dayDiv.style.backgroundColor = teamEventColor;
+            dayDiv.textContent += '
+👥 Team Event';
+          } else if (savedData[dateStr]) {
+            const people = savedData[dateStr];
+            let labels = [];
+            for (const person of people) {
+              labels.push(person);
+              if (!personDays[person]) personDays[person] = [];
+              personDays[person].push(`${dateStr} (Week ${weekNo})`);
+            }
+            dayDiv.textContent += `
+(${labels.join(', ')})`;
+            dayDiv.style.backgroundColor = peopleColors[people[0]];
+          }
+
+          dayDiv.addEventListener('click', () => {
+            if (teamEventMode) {
+              const index = teamEventDays.indexOf(dateStr);
+              if (index === -1) {
+                teamEventDays.push(dateStr);
+              } else {
+                teamEventDays.splice(index, 1);
+              }
+              localStorage.setItem('teamEventDays', JSON.stringify(teamEventDays));
+              renderCalendar(year);
+              return;
+            }
+            const selectedPerson = personSelect.value;
+            if (selectedPerson === 'All') return;
+            if (!savedData[dateStr]) savedData[dateStr] = [];
+            const index = savedData[dateStr].indexOf(selectedPerson);
+            if (index === -1) {
+              savedData[dateStr].push(selectedPerson);
+            } else {
+              savedData[dateStr].splice(index, 1);
+              if (savedData[dateStr].length === 0) {
+                delete savedData[dateStr];
+              }
+            }
+            localStorage.setItem('fullYearCalendar', JSON.stringify(savedData));
+            renderCalendar(year);
+          });
+
+          weekRows[weekNo].appendChild(dayDiv);
+        }
+      }
+
+      for (const weekNo in weekRows) {
+        monthBlock.appendChild(weekRows[weekNo]);
+      }
+      container.appendChild(monthBlock);
+    }
+
+    for (const person in personDays) {
+      const group = document.createElement('div');
+      group.className = 'person-group';
+      group.innerHTML = `<h4>${person}</h4><ul>` + personDays[person].map(d => `<li>${d}</li>`).join('') + '</ul>';
+      overview.appendChild(group);
+    }
+  }
+
+  yearSelect.addEventListener('change', () => {
+    renderCalendar(parseInt(yearSelect.value));
+  });
+
+  personSelect.addEventListener('change', () => {
+    renderCalendar(parseInt(yearSelect.value));
+  });
+
+  function exportData() {
+    const data = {
+      calendar: savedData,
+      teamEvents: teamEventDays
+    };
+    const dataStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'calendar_data.json';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  renderCalendar(parseInt(yearSelect.value));
+</script>
+</body>
+</html>
